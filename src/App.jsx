@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import axios from "axios";
 import { Modal } from "bootstrap";
+import ReactLoading from 'react-loading';
 
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -12,6 +13,8 @@ function App() {
   const [products, setProducts] = useState([]);
   const [tempProduct, setTempProduct] = useState([]);
   const [cart, setCart] = useState({});
+  const [isScreenLoading, setIsScreenLoading] = useState(false);//(全螢幕)預設關閉
+  const [isLoading, setIsLoading] = useState(false);//(部分)預設關閉
   
   //取得購物車列表
   const getCart = async()=>{
@@ -25,13 +28,20 @@ function App() {
     }
   }
 
+  //取得產品列表
   useEffect(() => {
     const getProducts = async () => {
+      //在發送get請求前，開啟Loading
+      setIsScreenLoading(true);
       try {
         const res = await axios.get(`${BASE_URL}/v2/api/${API_PATH}/products`);
         setProducts(res.data.products);
       } catch (error) {
         alert("取得產品失敗");
+      }
+      finally{
+        //無論成功或失敗，都要關閉Loading
+        setIsScreenLoading(false);
       }
     };
     getProducts();
@@ -62,6 +72,7 @@ function App() {
   
   //加入購物車：數量要轉型別
   const addCartItem = async(product_id,qty)=>{
+    setIsLoading(true);//跑Loading
     try {
       await axios.post(`${BASE_URL}/v2/api/${API_PATH}/cart`,{
         data:{
@@ -73,30 +84,45 @@ function App() {
     } catch (error) {
     alert("加入購物車失敗")
     }
+    finally{
+      //最後關閉Loading
+      setIsLoading(false);
+    }
   }
 
   //清空購物車(全部)
   const removeCart = async()=>{
+    setIsScreenLoading(true);
     try {
       await axios.delete(`${BASE_URL}/v2/api/${API_PATH}/carts`)
      getCart();//每次加入購物車後重新取得列表
     } catch (error) {
     alert("清空購物車失敗")
     }
+    finally{
+      //最後關閉Loading
+      setIsScreenLoading(false);
+    }
   }
 
    //刪除購物車(單一)
    const removeCartItem = async(cartItem_id)=>{
+    setIsScreenLoading(true);
     try {
       await axios.delete(`${BASE_URL}/v2/api/${API_PATH}/cart/${cartItem_id}`)
      getCart();//每次加入購物車後重新取得列表
     } catch (error) {
     alert("刪除購物車品項失敗")
     }
+    finally{
+      //最後關閉Loading
+      setIsScreenLoading(false);
+    }
   }
 
   //調整購物車產品數量 (六角API參數有三個，所以都代進去)
   const updateCartItem = async(cartItem_id,product_id,qty)=>{
+    setIsScreenLoading(true);
     try {
       await axios.put(`${BASE_URL}/v2/api/${API_PATH}/cart/${cartItem_id}`,{
         data:{
@@ -108,13 +134,18 @@ function App() {
     } catch (error) {
     alert("更新購物車品項失敗")
     }
+    finally{
+      //最後關閉Loading
+      setIsScreenLoading(false);
+    }
   }
 
-  //結帳表單：errors預設為空物件，若有error發生，物件會有資：
+  //結帳表單：1.errors預設為空物件，若有error發生，物件會有資料，2.reset是清空表單資料
   const{
     register,
     handleSubmit,
-    formState:{errors}
+    formState:{errors},
+    reset
   } = useForm()
 
   const onSubmit = handleSubmit((data)=>{
@@ -137,12 +168,20 @@ function App() {
     checkout(userInfo);
   })
 
-  //結帳API
+  //結帳(訂單提交)API
   const checkout = async(data)=>{
+    setIsScreenLoading(true);
     try {
-      axios.post(`${BASE_URL}/v2/api/${API_PATH}/order`,data)   
+      await axios.post(`${BASE_URL}/v2/api/${API_PATH}/order`,data)   
+      reset();//送出後清空表單
+      getCart();//重新取得購物車列表(重新渲染後會清空)
+      alert("結帳成功！");
     } catch (error) {
       alert("結帳失敗")
+    }
+    finally{
+      //最後關閉Loading
+      setIsScreenLoading(false);
     }
   }
 
@@ -183,8 +222,16 @@ function App() {
                       查看更多
                     </button>
                     {/*透過product來渲染產品列表，所以取其id ，點擊一次數量+1，預設數量為1*/}
-                    <button onClick={()=>addCartItem(product.id,1)} type="button" className="btn btn-outline-danger">
+                    <button disabled = {isLoading} onClick={()=>addCartItem(product.id,1)} type="button" className=" btn btn-outline-danger d-flex align-items-center gap-2">
                       加到購物車
+                      {isLoading &&(
+                    <ReactLoading
+                    type={"spin"}
+                    color={"#000"}
+                    height={"1.5rem"}
+                    width={"1.5rem"}
+                  />
+                  )}
                     </button>
                   </div>
                 </td>
@@ -243,9 +290,18 @@ function App() {
                 </div>
               </div>
               <div className="modal-footer">
-                {/*透過點擊tempProductModal把tempProduc把加進去，所以取其id */}
-                <button onClick={()=>addCartItem(tempProduct.id,qtySelect)} type="button" className="btn btn-primary">
-                  加入購物車
+                {/*1.透過點擊tempProductModal把tempProduc把加進去，所以取其id
+                2.當isLoadin為true時，加入購物車的按鈕為disabled，api回傳後才能再點擊，避免api尚未回傳就重複點擊 */}
+                <button disabled = {isLoading} onClick={()=> addCartItem (tempProduct.id,qtySelect)} type="button" className="btn btn-primary d-flex align-items-center gap-2">
+                <div>加入購物車</div>
+                  {isLoading &&(
+                    <ReactLoading
+                    type={"spin"}
+                    color={"#000"}
+                    height={"1.5rem"}
+                    width={"1.5rem"}
+                  />
+                  )}
                 </button>
               </div>
             </div>
@@ -430,8 +486,9 @@ function App() {
         </form>
       </div>
 
-      {/* Loading */}
-      <div
+      {/* Loading ：當isScreenLoading 開的時候才顯示*/}
+      {isScreenLoading &&(
+        <div
         className="d-flex justify-content-center align-items-center"
         style={{
           position: "fixed",
@@ -442,6 +499,8 @@ function App() {
       >
         <ReactLoading type="spin" color="black" width="4rem" height="4rem" />
       </div>
+      )}
+      
     </div>
   );
 }
